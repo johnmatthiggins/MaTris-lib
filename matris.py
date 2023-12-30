@@ -47,7 +47,7 @@ VISIBLE_MATRIX_HEIGHT = MATRIX_HEIGHT - 2
 
 
 class Matris(object):
-    def __init__(self):
+    def __init__(self, screen):
         self.surface = screen.subsurface(
             Rect(
                 (MATRIS_OFFSET + BORDERWIDTH, MATRIS_OFFSET + BORDERWIDTH),
@@ -484,7 +484,8 @@ class Game(object):
         """
         clock = pygame.time.Clock()
 
-        self.matris = Matris()
+        self.matris = Matris(screen)
+        self.screen = screen
 
         screen.blit(construct_nightmare(screen.get_size()), (0, 0))
 
@@ -590,7 +591,7 @@ class Game(object):
             ),
         )
 
-        screen.blit(
+        self.screen.blit(
             area, area.get_rect(bottom=HEIGHT - MATRIS_OFFSET, centerx=TRICKY_CENTERX)
         )
 
@@ -617,7 +618,7 @@ class Game(object):
         center = areasize / 2 - tetromino_surf_size / 2
         area.blit(tetromino_surf, (center, center))
 
-        screen.blit(area, area.get_rect(top=MATRIS_OFFSET, centerx=TRICKY_CENTERX))
+        self.screen.blit(area, area.get_rect(top=MATRIS_OFFSET, centerx=TRICKY_CENTERX))
 
 
 class Menu(object):
