@@ -23,7 +23,7 @@ def get_sound(filename):
     )
 
 
-GAME_SPEED = 10
+GAME_SPEED = 100
 
 BGCOLOR = (15, 15, 20)
 BORDERCOLOR = (140, 140, 140)
@@ -119,16 +119,18 @@ class Matris(object):
 
         self.lock_tetromino()
 
-    def update(self, timepassed):
+    def update(self, timepassed, input_vector=None):
         """
         Main game loop
         """
+        timepassed = 1
         self.needs_redraw = False
 
         pressed = lambda key: event.type == pygame.KEYDOWN and event.key == key
         unpressed = lambda key: event.type == pygame.KEYUP and event.key == key
 
         events = pygame.event.get()
+
         # Controls pausing and quitting the game.
         for event in events:
             if pressed(pygame.K_p):
@@ -166,20 +168,13 @@ class Matris(object):
         self.downwards_speed = self.base_downwards_speed ** (1 + self.level / 10.0)
 
         self.downwards_timer += timepassed
-        downwards_speed = (
-            self.downwards_speed * 0.10
-            if any(
-                [
-                    pygame.key.get_pressed()[pygame.K_DOWN],
-                    pygame.key.get_pressed()[pygame.K_s],
-                ]
-            )
-            else self.downwards_speed
-        )
+        downwards_speed = self.downwards_speed
+
+        if any([pygame.key.get_pressed()[pygame.K_DOWN], pygame.key.get_pressed()[pygame.K_s]]):
+            downwards_speed = self.downwards_speed * 0.10
+
         if self.downwards_timer > downwards_speed:
-            if not self.request_movement(
-                "down"
-            ):  # Places tetromino if it cannot move further down
+            if not self.request_movement("down"):
                 self.lock_tetromino()
 
             self.downwards_timer %= downwards_speed
@@ -396,6 +391,7 @@ class Matris(object):
 
         self.needs_redraw = True
 
+
     def remove_lines(self):
         """
         Removes lines from the board
@@ -521,7 +517,6 @@ class Game(object):
                     (timepassed / ticks) if not self.matris.paused else 0
                 ):
                     self.redraw()
-                    input()
                     print(self.matris.numpy())
             except GameOver:
                 return
@@ -643,48 +638,51 @@ class Menu(object):
     running = True
 
     def main(self, screen):
-        clock = pygame.time.Clock()
-        menu = kezmenu.KezMenu(
+        self.clock = pygame.time.Clock()
+        self.menu = kezmenu.KezMenu(
             ["Play!", lambda: Game().main(screen)],
             ["Quit", lambda: setattr(self, "running", False)],
         )
-        menu.position = (50, 50)
-        menu.enableEffect(
+        self.menu.position = (50, 50)
+        self.menu.enableEffect(
             "enlarge-font-on-focus",
             font=None,
             size=60,
             enlarge_factor=1.2,
             enlarge_time=0.3,
         )
-        menu.color = (255, 255, 255)
-        menu.focus_color = (40, 200, 40)
+        self.menu.color = (255, 255, 255)
+        self.menu.focus_color = (40, 200, 40)
 
-        nightmare = construct_nightmare(screen.get_size())
-        highscoresurf = self.construct_highscoresurf()  # Loads highscore onto menu
+        self.nightmare = construct_nightmare(screen.get_size())
+        self.highscoresurf = self.construct_highscoresurf()
 
-        timepassed = clock.tick(30) / 1000.0
+        self.timepassed = self.clock.tick(30) / 1000.0
 
         while self.running:
-            events = pygame.event.get()
+            self.step(screen)
 
-            for event in events:
-                if event.type == pygame.QUIT:
-                    exit()
+    def step(self, screen):
+        events = pygame.event.get()
 
-            menu.update(events, timepassed)
+        for event in events:
+            if event.type == pygame.QUIT:
+                exit()
 
-            timepassed = clock.tick(30) / 1000.0
+        self.menu.update(events, self.timepassed)
 
-            if timepassed > 1:  # A game has most likely been played
-                highscoresurf = self.construct_highscoresurf()
+        self.timepassed = self.clock.tick(30) / 1000.0
 
-            screen.blit(nightmare, (0, 0))
-            screen.blit(
-                highscoresurf,
-                highscoresurf.get_rect(right=WIDTH - 50, bottom=HEIGHT - 50),
-            )
-            menu.draw(screen)
-            pygame.display.flip()
+        if self.timepassed > 1:
+            self.highscoresurf = self.construct_highscoresurf()
+
+        screen.blit(self.nightmare, (0, 0))
+        screen.blit(
+            self.highscoresurf,
+            self.highscoresurf.get_rect(right=WIDTH - 50, bottom=HEIGHT - 50),
+        )
+        self.menu.draw(screen)
+        pygame.display.flip()
 
     def construct_highscoresurf(self):
         """
