@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+import numpy as np
+
 import pygame
 from pygame import Rect, Surface
 import random
@@ -475,6 +477,16 @@ class Matris(object):
                     )
         return surf
 
+    def numpy(self):
+        board = np.zeros((MATRIX_HEIGHT, MATRIX_WIDTH))
+
+        for key, value in self.matrix.items():
+            x = key[0]
+            y = key[1]
+            board[x, y] = 1 if value else 0
+
+        return board
+
 
 class Game(object):
     def main(self, screen):
@@ -509,6 +521,8 @@ class Game(object):
                     (timepassed / ticks) if not self.matris.paused else 0
                 ):
                     self.redraw()
+                    input()
+                    print(self.matris.numpy())
             except GameOver:
                 return
 
