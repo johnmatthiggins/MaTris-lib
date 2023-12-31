@@ -22,7 +22,8 @@ class TetrisGym(gym.Env):
         terminated = not self.game.step(input_vector)
         truncated = False
         state = self.game.tensor_state()
-        reward = 0
+        calculated_reward = 0
+        reward = 0 if terminated else calculated_reward
 
         return (state, reward, terminated, truncated)
 
@@ -32,8 +33,6 @@ class TetrisGym(gym.Env):
         info = dict()
 
         return (state, info)
-
-
 
 if __name__ == '__main__':
     tgym = TetrisGym()
