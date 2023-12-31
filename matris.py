@@ -1,11 +1,10 @@
 #!/usr/bin/env python
-import numpy as np
+import torch
 
 import pygame
 from pygame import Rect, Surface
 import random
 import os
-import kezmenu
 
 from tetrominoes import list_of_tetrominoes
 from tetrominoes import rotate
@@ -49,7 +48,7 @@ VISIBLE_MATRIX_HEIGHT = MATRIX_HEIGHT - 2
 
 
 class Matris(object):
-    def __init__(self, screen):
+    def __init__(self, screen, device="mps"):
         self.surface = screen.subsurface(
             Rect(
                 (MATRIS_OFFSET + BORDERWIDTH, MATRIS_OFFSET + BORDERWIDTH),
@@ -57,6 +56,7 @@ class Matris(object):
             )
         )
 
+        self.device = device
         self.matrix = dict()
         for y in range(MATRIX_HEIGHT):
             for x in range(MATRIX_WIDTH):
@@ -131,39 +131,56 @@ class Matris(object):
 
         events = pygame.event.get()
 
-        # Controls pausing and quitting the game.
-        for event in events:
-            if pressed(pygame.K_p):
-                self.surface.fill((0, 0, 0))
-                self.needs_redraw = True
-                self.paused = not self.paused
-            elif event.type == pygame.QUIT:
-                self.gameover(full_exit=True)
-            elif pressed(pygame.K_ESCAPE):
-                self.gameover()
+        if input_vector is None:
+            # Controls pausing and quitting the game.
+            for event in events:
+                if pressed(pygame.K_p):
+                    self.surface.fill((0, 0, 0))
+                    self.needs_redraw = True
+                    self.paused = not self.paused
+                elif event.type == pygame.QUIT:
+                    self.gameover(full_exit=True)
+                elif pressed(pygame.K_ESCAPE):
+                    self.gameover()
 
-        if self.paused:
-            return self.needs_redraw
+            if self.paused:
+                return self.needs_redraw
 
-        for event in events:
-            # Controls movement of the tetromino
-            if pressed(pygame.K_SPACE):
-                self.hard_drop()
-            elif pressed(pygame.K_UP) or pressed(pygame.K_w):
-                self.request_rotation()
-            elif pressed(pygame.K_LEFT) or pressed(pygame.K_a):
-                self.request_movement("left")
+            for event in events:
+                # Controls movement of the tetromino
+                if pressed(pygame.K_SPACE):
+                    self.hard_drop()
+                elif pressed(pygame.K_UP) or pressed(pygame.K_w):
+                    self.request_rotation()
+                elif pressed(pygame.K_LEFT) or pressed(pygame.K_a):
+                    self.request_movement("left")
+                    self.movement_keys["left"] = 1
+                elif pressed(pygame.K_RIGHT) or pressed(pygame.K_d):
+                    self.request_movement("right")
+                    self.movement_keys["right"] = 1
+
+                elif unpressed(pygame.K_LEFT) or unpressed(pygame.K_a):
+                    self.movement_keys["left"] = 0
+                    self.movement_keys_timer = (-self.movement_keys_speed) * 2
+                elif unpressed(pygame.K_RIGHT) or unpressed(pygame.K_d):
+                    self.movement_keys["right"] = 0
+                    self.movement_keys_timer = (-self.movement_keys_speed) * 2
+        else:
+            if input_vector[0] == 1:
                 self.movement_keys["left"] = 1
-            elif pressed(pygame.K_RIGHT) or pressed(pygame.K_d):
-                self.request_movement("right")
-                self.movement_keys["right"] = 1
-
-            elif unpressed(pygame.K_LEFT) or unpressed(pygame.K_a):
-                self.movement_keys["left"] = 0
-                self.movement_keys_timer = (-self.movement_keys_speed) * 2
-            elif unpressed(pygame.K_RIGHT) or unpressed(pygame.K_d):
                 self.movement_keys["right"] = 0
-                self.movement_keys_timer = (-self.movement_keys_speed) * 2
+                self.request_movement("left")
+            elif input_vector[1] == 1:
+                self.movement_keys["left"] = 0
+                self.movement_keys["right"] = 1
+                self.request_movement("right")
+            elif input_vector[2] == 1:
+                self.request_rotation()
+                self.movement_keys["left"]  = 0
+                self.movement_keys["right"] = 0
+            else:
+                self.hard_drop()
+
 
         self.downwards_speed = self.base_downwards_speed ** (1 + self.level / 10.0)
 
@@ -473,8 +490,8 @@ class Matris(object):
                     )
         return surf
 
-    def numpy(self):
-        board = np.zeros((MATRIX_HEIGHT, MATRIX_WIDTH))
+    def tensor_state(self):
+        board = torch.zeros((MATRIX_HEIGHT, MATRIX_WIDTH), device=self.device)
 
         for key, value in self.matrix.items():
             x = key[0]
@@ -485,12 +502,13 @@ class Matris(object):
 
 
 class Game(object):
-    def __init__(self, screen):
+    def __init__(self, screen, device="mps"):
         """
         Main loop for game
         Redraws scores and next tetromino each time the loop is passed through
         """
 
+        self.device = device
         self.screen = screen
         self.clock = pygame.time.Clock()
 
@@ -514,13 +532,13 @@ class Game(object):
         while True:
             self.step()
 
-    def step(self):
+    def step(self, action=None):
         try:
             timepassed = self.clock.tick(50)
             ticks = 1000.0 / GAME_SPEED
 
             if self.matris.update(
-                (timepassed / ticks) if not self.matris.paused else 0
+                (timepassed / ticks) if not self.matris.paused else 0, action
             ):
                 self.redraw()
 
@@ -544,7 +562,6 @@ class Game(object):
         """
         if not self.matris.paused:
             self.blit_next_tetromino(self.matris.surface_of_next_tetromino)
-            print(self.matris.surface_of_next_tetromino)
             self.blit_info()
 
             self.matris.draw_surface()
@@ -647,72 +664,8 @@ class Game(object):
 
         self.screen.blit(area, area.get_rect(top=MATRIS_OFFSET, centerx=TRICKY_CENTERX))
 
-    def numpy(self):
-        return self.matris.numpy()
-
-
-class Menu(object):
-    """
-    Creates main menu
-    """
-
-    running = True
-
-    def main(self, screen):
-        self.clock = pygame.time.Clock()
-        self.menu = kezmenu.KezMenu(
-            ["Play!", lambda: Game(screen).main()],
-            ["Quit", lambda: setattr(self, "running", False)],
-        )
-        self.menu.position = (50, 50)
-        self.menu.enableEffect(
-            "enlarge-font-on-focus",
-            font=None,
-            size=60,
-            enlarge_factor=1.2,
-            enlarge_time=0.3,
-        )
-        self.menu.color = (255, 255, 255)
-        self.menu.focus_color = (40, 200, 40)
-
-        self.nightmare = construct_nightmare(screen.get_size())
-        self.highscoresurf = self.construct_highscoresurf()
-
-        self.timepassed = self.clock.tick(30) / 1000.0
-
-        while self.running:
-            self.step(screen)
-
-    def step(self, screen):
-        events = pygame.event.get()
-
-        for event in events:
-            if event.type == pygame.QUIT:
-                exit()
-
-        self.menu.update(events, self.timepassed)
-
-        self.timepassed = self.clock.tick(30) / 1000.0
-
-        if self.timepassed > 1:
-            self.highscoresurf = self.construct_highscoresurf()
-
-        screen.blit(self.nightmare, (0, 0))
-        screen.blit(
-            self.highscoresurf,
-            self.highscoresurf.get_rect(right=WIDTH - 50, bottom=HEIGHT - 50),
-        )
-        self.menu.draw(screen)
-        pygame.display.flip()
-
-    def construct_highscoresurf(self):
-        """
-        Loads high score from file
-        """
-        font = pygame.font.Font(None, 50)
-        highscore = load_score()
-        text = "Highscore: {}".format(highscore)
-        return font.render(text, True, (255, 255, 255))
+    def tensor_state(self):
+        return self.matris.tensor_state()
 
 
 def construct_nightmare(size):
