@@ -23,7 +23,7 @@ def get_sound(filename):
     )
 
 
-GAME_SPEED = 100
+GAME_SPEED = 1000
 
 BGCOLOR = (15, 15, 20)
 BORDERCOLOR = (140, 140, 140)
@@ -485,41 +485,58 @@ class Matris(object):
 
 
 class Game(object):
-    def main(self, screen):
+    def __init__(self, screen):
         """
         Main loop for game
         Redraws scores and next tetromino each time the loop is passed through
         """
-        clock = pygame.time.Clock()
+
+        self.screen = screen
+        self.clock = pygame.time.Clock()
 
         self.matris = Matris(screen)
         self.screen = screen
 
         screen.blit(construct_nightmare(screen.get_size()), (0, 0))
 
-        matris_border = Surface(
+        self.matris_border = Surface(
             (
                 MATRIX_WIDTH * BLOCKSIZE + BORDERWIDTH * 2,
                 VISIBLE_MATRIX_HEIGHT * BLOCKSIZE + BORDERWIDTH * 2,
             )
         )
-        matris_border.fill(BORDERCOLOR)
-        screen.blit(matris_border, (MATRIS_OFFSET, MATRIS_OFFSET))
+        self.matris_border.fill(BORDERCOLOR)
+        screen.blit(self.matris_border, (MATRIS_OFFSET, MATRIS_OFFSET))
 
         self.redraw()
 
+    def main(self):
         while True:
-            try:
-                timepassed = clock.tick(50)
-                ticks = 1000.0 / GAME_SPEED
+            self.step()
 
-                if self.matris.update(
-                    (timepassed / ticks) if not self.matris.paused else 0
-                ):
-                    self.redraw()
-                    print(self.matris.numpy())
-            except GameOver:
-                return
+    def step(self):
+        try:
+            timepassed = self.clock.tick(50)
+            ticks = 1000.0 / GAME_SPEED
+
+            if self.matris.update(
+                (timepassed / ticks) if not self.matris.paused else 0
+            ):
+                self.redraw()
+
+            return True
+        except GameOver:
+            return False
+
+
+    def level(self):
+        return self.matris.level
+
+    def combo(self):
+        return self.matris.combo
+
+    def lines(self):
+        return self.matris.lines
 
     def redraw(self):
         """
@@ -527,6 +544,7 @@ class Game(object):
         """
         if not self.matris.paused:
             self.blit_next_tetromino(self.matris.surface_of_next_tetromino)
+            print(self.matris.surface_of_next_tetromino)
             self.blit_info()
 
             self.matris.draw_surface()
@@ -629,6 +647,9 @@ class Game(object):
 
         self.screen.blit(area, area.get_rect(top=MATRIS_OFFSET, centerx=TRICKY_CENTERX))
 
+    def numpy(self):
+        return self.matris.numpy()
+
 
 class Menu(object):
     """
@@ -640,7 +661,7 @@ class Menu(object):
     def main(self, screen):
         self.clock = pygame.time.Clock()
         self.menu = kezmenu.KezMenu(
-            ["Play!", lambda: Game().main(screen)],
+            ["Play!", lambda: Game(screen).main()],
             ["Quit", lambda: setattr(self, "running", False)],
         )
         self.menu.position = (50, 50)
@@ -702,7 +723,9 @@ def construct_nightmare(size):
 
     boxsize = 8
     bordersize = 1
-    vals = "1235"  # only the lower values, for darker colors and greater fear
+
+    # only the lower values, for darker colors and greater fear
+    vals = "1235"
     arr = pygame.PixelArray(surf)
     for x in range(0, len(arr), boxsize):
         for y in range(0, len(arr[x]), boxsize):
@@ -717,6 +740,11 @@ def construct_nightmare(size):
                         arr[LX][LY] = color
     del arr
     return surf
+
+def create_screen():
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    return screen
 
 
 def main():
