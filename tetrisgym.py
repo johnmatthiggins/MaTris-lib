@@ -23,6 +23,7 @@ class TetrisGym(gym.Env):
         truncated = False
         state = self.game.tensor_state()
         calculated_reward = 0
+
         reward = 0 if terminated else calculated_reward
 
         return (state, reward, terminated, truncated)
